@@ -144,34 +144,97 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["query"],
         },
       },
+      {
+        name: "read_file",
+        description: "Read the contents of a file in Google Drive",
+        inputSchema: {
+          type: "object",
+          properties: {
+            fileId: {
+              type: "string",
+              description: "The ID of the file to read",
+            },
+          },
+          required: ["fileId"],
+        },
+      },
     ],
   };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  console.log("Received request:", request.params);
   if (request.params.name === "search") {
     const userQuery = request.params.arguments?.query as string;
+    console.log("Received search request for query:", userQuery);
+
     const escapedQuery = userQuery.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const formattedQuery = `fullText contains '${escapedQuery}'`;
 
-    const res = await drive.files.list({
-      q: formattedQuery,
-      pageSize: 10,
-      fields: "files(id, name, mimeType, modifiedTime, size)",
-    });
+    try {
+      const res = await drive.files.list({
+        q: formattedQuery,
+        pageSize: 10,
+        fields: "files(id, name, mimeType, modifiedTime, size)",
+      });
 
-    const fileList = res.data.files
-      ?.map((file: any) => `${file.name} (${file.mimeType})`)
-      .join("\n");
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Found ${res.data.files?.length ?? 0} files:\n${fileList}`,
-        },
-      ],
-      isError: false,
-    };
+      console.log("Search results:", res.data.files);
+
+      const fileList = res.data.files
+        ?.map((file: any) => `${file.name} (${file.mimeType})`)
+        .join("\n");
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Found ${res.data.files?.length ?? 0} files:\n${fileList}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      console.error("Error during search:", error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: "An error occurred while searching for files.",
+          },
+        ],
+        isError: true,
+      };
+    }
+  } else if (request.params.name === "read_file") {
+    const fileId = request.params.arguments?.fileId as string;
+
+    const file = await drive.files.get({
+      fileId,
+      alt: "media",
+    }, { responseType: "arraybuffer" });
+
+    const mimeType = file.headers["content-type"] || "application/octet-stream";
+    if (mimeType.startsWith("text/")) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: Buffer.from(file.data as ArrayBuffer).toString("utf-8"),
+          },
+        ],
+        isError: false,
+      };
+    } else {
+      return {
+        content: [
+          {
+            type: "blob",
+            blob: Buffer.from(file.data as ArrayBuffer).toString("base64"),
+          },
+        ],
+        isError: false,
+      };
+    }
   }
   throw new Error("Tool not found");
 });

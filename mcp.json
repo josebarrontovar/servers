@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+      "gdrive": {
+        "command": "node",
+        "args": [
+          "C:/Users/jose.barron/servers/src/gdrive/dist/index.js",
+          "-y"
+        ]
+      }
+    }
+  }
